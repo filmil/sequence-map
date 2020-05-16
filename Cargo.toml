@@ -1,0 +1,8 @@
+[package]
+name = "sequence-map"
+version = "0.1.0"
+authors = ["Filip Filmar <filmil@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+zerocopy = "0.3.0"
