@@ -126,6 +126,7 @@ impl Builder {
         index
     }
 
+    /// Creates the resulting vector of bytes that encodes this sequence map.
     pub fn build(mut self) -> Vec<u8> {
         {
             let len = self.index.len();
@@ -139,6 +140,7 @@ impl Builder {
         result
     }
 
+    /// Inserts this `key`-`value` pair into the map.
     pub fn insert(&mut self, key: u64, value: &str) {
         let root_table_initialized = {
             let root = self.header();
