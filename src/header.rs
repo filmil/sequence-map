@@ -1,4 +1,3 @@
-
 use crate::cell;
 use std::mem::size_of;
 use zerocopy::AsBytes;
@@ -131,8 +130,13 @@ impl<'a> TableMut<'a> {
     pub fn init(bits: u8, bytes: &'a mut [u8]) -> TableMut {
         assert!(bits <= 64);
 
+        let bytes_len = bytes.len();
         let (header, rest): (LayoutVerified<_, TableHeader>, _) =
-            LayoutVerified::new_from_prefix_zeroed(bytes).unwrap();
+            LayoutVerified::new_from_prefix_zeroed(bytes).expect(&format!(
+                "TableMut::init layout verified: bits: {}, len: {}",
+                bits,
+                bytes_len,
+            ));
         let elems = 1 << bits;
         let size = elems * size_of::<cell::Instance>();
         let cells = LayoutVerified::new_slice_zeroed(&mut rest[..size]).unwrap();

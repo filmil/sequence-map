@@ -5,6 +5,7 @@ use std::ffi;
 use std::string;
 
 // Internally stores strings in a long sequence.  Same strings are deduped.
+#[derive(Debug)]
 pub struct Intern {
     strings: Vec<u8>,
     seen: BTreeMap<string::String, usize>,
@@ -44,6 +45,10 @@ impl Intern {
     
     pub fn get(&self, index:usize) -> String<'_> {
         String::over(&self.strings[index..])
+    }
+
+    pub fn len(&self) -> usize {
+        self.strings.len()
     }
 }
 

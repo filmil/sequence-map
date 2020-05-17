@@ -11,29 +11,25 @@ pub(crate) mod header;
 pub struct Builder {
     bits: u8,
     index: Vec<u8>,
-    strings: Vec<u8>,
+    strings: string_slice::Intern,
 }
 
 impl Builder {
     /// Creates a new map builder.  `bits` determines how many bits are used
-    /// for each level of the internal trie.
+    /// for each level of the internal trie, min bits is 2, and max is 16
     pub fn new(bits: usize) -> Builder {
+        assert!(bits >= 2 && bits <= 16);
         let mut builder = Builder {
             bits: bits as u8,
             index: vec![],
-            strings: vec![],
+            strings: string_slice::Intern::new(),
         };
         builder.reserve_header();
         builder
     }
 
     fn allocate_string(&mut self, s: &str) -> usize {
-        let index = self.strings.len();
-        // Check whether a string like this one was already pushed.
-        let new_index = index + string_slice::String::required_len(s);
-        self.strings.resize(new_index, 0);
-        string_slice::String::init(s, &mut self.strings[index..new_index]);
-        index
+        self.strings.add(s)
     }
 
     fn header_unchecked(&mut self) -> &mut header::Root {
@@ -81,7 +77,8 @@ impl Builder {
             root.set_string_offset(len);
         }
         let mut result = self.index;
-        result.append(&mut self.strings);
+        let mut strings: Vec<u8> = self.strings.into();
+        result.append(&mut strings);
         result
     }
 
@@ -129,25 +126,28 @@ impl Builder {
                 cell::Type::StringPtr => {
                     // There's already a string here.
                     let (str_index, str_key) = {
-                        let mut table = header::TableMut::overlay_mut(&mut self.index[table_index..]);
+                        let mut table =
+                            header::TableMut::overlay_mut(&mut self.index[table_index..]);
                         let cell = table.cell_mut(index);
                         // This is the string that was already here.
                         cell.string_index_and_key()
                     };
 
                     // Adjust the key of the string which was already there.
-                    assert!(remaining_bits <= 64);
+                    assert!(remaining_bits <= 64, "remaining_bits: {}", remaining_bits);
                     let new_str_key = str_key >> (64 - remaining_bits);
 
                     let new_table_index = self.append_table();
                     {
                         // Create a new table to place the old string into.
-                        let mut table = header::TableMut::overlay_mut(&mut self.index[table_index..]);
+                        let mut table =
+                            header::TableMut::overlay_mut(&mut self.index[table_index..]);
                         let cell = table.cell_mut(index);
                         cell.become_table_ptr(new_table_index);
                     }
                     {
-                        let mut new_table = header::TableMut::overlay_mut(&mut self.index[new_table_index..]);
+                        let mut new_table =
+                            header::TableMut::overlay_mut(&mut self.index[new_table_index..]);
                         let new_str_key = new_table.next_key(new_str_key);
                         let new_cell_index = new_table.index(new_str_key);
                         let cell = new_table.cell_mut(new_cell_index);
@@ -158,7 +158,8 @@ impl Builder {
                 cell::Type::TablePtr => {
                     // Chase the table pointer.
                     {
-                        let mut table = header::TableMut::overlay_mut(&mut self.index[table_index..]);
+                        let mut table =
+                            header::TableMut::overlay_mut(&mut self.index[table_index..]);
                         let cell = table.cell_mut(index);
                         table_index = cell.table_index();
                     }
@@ -215,8 +216,7 @@ impl<'a> Map<'a> {
                             let cstr = unsafe {
                                 // We know that the strings in the intern table
                                 // are C strings (UTF-8 with a trailing '/0').
-                                let ptr =
-                                    self.rep[string_index..].as_ptr() as *const c_char;
+                                let ptr = self.rep[string_index..].as_ptr() as *const c_char;
                                 CStr::from_ptr(ptr)
                             };
                             return Some(cstr.to_str().expect("UTF8 worked"));
@@ -249,6 +249,7 @@ impl<'a> Map<'a> {
 mod tests {
 
     use super::*;
+    use std::collections::BTreeMap;
 
     #[test]
     fn basic() {
@@ -282,13 +283,11 @@ mod tests {
 
     #[test]
     fn get_two_strings() {
-        println!("----- inserting");
         let mut builder = Builder::new(7);
         builder.insert(0x11_11_11, "World!");
         builder.insert(0x22, "Again!!");
         builder.insert(0x11, "Yadda!");
         builder.insert(0x11_11, "Diddy!");
-        println!("----- looking up");
         let bytes = builder.build();
         // This should not need to be mutable!
         let lookup = Map::new(&bytes);
@@ -296,5 +295,35 @@ mod tests {
         assert_eq!("Diddy!", lookup.get(0x11_11).unwrap());
         assert_eq!("Again!!", lookup.get(0x22).unwrap());
         assert_eq!("World!", lookup.get(0x11_11_11).unwrap());
+    }
+
+    fn insert_and_lookup_random_strings(bits: usize) {
+        let mut reference_map = BTreeMap::new();
+        let mut builder = Builder::new(bits);
+        for entry in 0..1000 {
+            let entry_str = format!("entry_{}", entry);
+            reference_map.insert(entry, entry_str.clone());
+            builder.insert(entry, &entry_str);
+        }
+
+        let buffer = builder.build();
+        let lookup = Map::new(&buffer);
+        for (key, value) in &reference_map {
+            assert_eq!(
+                lookup.get(*key).unwrap(),
+                *value,
+                "while looking up: key={}, value={}, bits={}",
+                key,
+                value,
+                bits
+            );
+        }
+    }
+
+    #[test]
+    fn test_insert_and_lookup_for_bits() {
+        for bits in 2..16 {
+            insert_and_lookup_random_strings(bits);
+        }
     }
 }
