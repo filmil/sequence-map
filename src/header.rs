@@ -72,21 +72,64 @@ pub struct TableHeader {
 
 impl TableHeader {
     pub fn set_bits(&mut self, bits: u8) {
-        assert!(bits <= 8);
+        assert!(bits <= 64);
         self.htype = Type::Table as TypeSize;
         self.bits = bits;
     }
 }
 
 pub struct Table<'a> {
-    pub header: &'a mut TableHeader,
-    pub cells: &'a mut [cell::Instance],
+    header: &'a TableHeader,
+    cells: &'a [cell::Instance],
 }
 
 impl<'a> Table<'a> {
+    // Overlays a table on top of this slice.  Assumes it is initialized.
+    pub fn overlay(bytes: &'a [u8]) -> Table {
+        let (header, rest): (LayoutVerified<_, TableHeader>, _) =
+            LayoutVerified::new_from_prefix(bytes).unwrap();
+        let header = header.into_ref();
+        assert_eq!(Type::from(header.htype), Type::Table);
+        let elems = 1 << header.bits;
+        let size = elems * size_of::<cell::Instance>();
+        let cells = LayoutVerified::new_slice(&rest[..size]).unwrap();
+        let cells = cells.into_slice();
+        Table { header, cells }
+    }
+
+    pub fn cell(&'a self, index: usize) -> &'a cell::Instance {
+        &self.cells[index]
+    }
+
+    pub fn index(&self, key: u64) -> usize {
+        let bits = self.header.bits;
+        let bitmask: u64 = (1 << bits) - 1;
+        let index = key & bitmask;
+        index as usize
+    }
+
+    pub fn next_key(&self, key: u64) -> u64 {
+        key >> self.header.bits
+    }
+
+    pub fn decrement_bits(&self, remaining: usize) -> usize {
+        let bits_usize: usize = self.header.bits as usize;
+        if remaining < bits_usize {
+            return 0;
+        }
+        remaining - bits_usize
+    }
+}
+
+pub struct TableMut<'a> {
+    header: &'a mut TableHeader,
+    cells: &'a mut [cell::Instance],
+}
+
+impl<'a> TableMut<'a> {
     // Initializes a table for 2^bits entries.
-    pub fn init(bits: u8, bytes: &'a mut [u8]) -> Table {
-        assert!(bits <= 8);
+    pub fn init(bits: u8, bytes: &'a mut [u8]) -> TableMut {
+        assert!(bits <= 64);
 
         let (header, rest): (LayoutVerified<_, TableHeader>, _) =
             LayoutVerified::new_from_prefix_zeroed(bytes).unwrap();
@@ -96,11 +139,11 @@ impl<'a> Table<'a> {
         let header = header.into_mut();
         header.set_bits(bits);
         let cells = cells.into_mut_slice();
-        Table { header, cells }
+        TableMut { header, cells }
     }
 
-    // Overlays a table on top of this slice.  Assumes it is initialized.
-    pub fn over(bytes: &'a mut [u8]) -> Table {
+    // Overlays a mutable table on top of this slice.  Assumes it is initialized.
+    pub fn overlay_mut(bytes: &'a mut [u8]) -> TableMut {
         let (header, rest): (LayoutVerified<_, TableHeader>, _) =
             LayoutVerified::new_from_prefix(bytes).unwrap();
         let header = header.into_mut();
@@ -109,7 +152,7 @@ impl<'a> Table<'a> {
         let size = elems * size_of::<cell::Instance>();
         let cells = LayoutVerified::new_slice(&mut rest[..size]).unwrap();
         let cells = cells.into_mut_slice();
-        Table { header, cells }
+        TableMut { header, cells }
     }
 
     pub fn cell_mut(&'a mut self, index: usize) -> &'a mut cell::Instance {
