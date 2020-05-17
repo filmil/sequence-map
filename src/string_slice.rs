@@ -1,13 +1,33 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::ffi;
 use std::string;
 
-// Internally stores strings in a long sequence.  Same strings are deduped.
+/// Internally stores strings in a long sequence.  Same strings are deduped.
 #[derive(Debug)]
 pub struct Intern {
+    // The vector that encodes all strings.  Strings are UTF-8, with a '\0'
+    // byte at the end of each.  This makes it easy to produce both rust strings
+    // and C strings from this same representation.
     strings: Vec<u8>,
+    // A map of seen strings and their respective offsets, from the beginning
+    // of the string.  On a repeated insert, no additional space is reserved
+    // for a string duplicate.
     seen: BTreeMap<string::String, usize>,
 }
 
@@ -25,6 +45,7 @@ impl Intern {
         }
     }
 
+    /// Add the string `s` to the string intern table.
     pub fn add(&mut self, s: &str) -> usize {
         let seen = self.seen.get(&s.to_string());
         match seen {
@@ -43,6 +64,7 @@ impl Intern {
         }
     }
     
+    ///
     pub fn get(&self, index:usize) -> String<'_> {
         String::over(&self.strings[index..])
     }
@@ -52,6 +74,11 @@ impl Intern {
     }
 }
 
+/// Represents a reference to an interned string.  The reference's lifetime
+/// is tied to the provider of the buffer from which the string is created.
+///
+/// Use `over` to overlay a [String] on top of a buffer.  Or use `init` to
+/// initialize a string into a buffer.
 #[allow(dead_code)]
 #[derive(Debug, Eq, PartialEq)]
 pub struct String<'a> {
@@ -59,14 +86,18 @@ pub struct String<'a> {
 }
 
 impl<'a> String<'a> {
+    /// Returns the number of bytes required to store `s`: which is the number
+    /// of bytes needed for the content, plus another one for the NUL end.
     pub fn required_len(s: &str) -> usize {
         s.len() + 1
     }
 
+    /// Returns the content of the string.
     pub fn content(&self) -> &'a ffi::CStr {
         &self.content
     }
 
+    /// Converts the string to 
     pub fn to_str(&self) -> &'a str {
         &self.content.to_str().expect("to_str success")
     }

@@ -1,8 +1,25 @@
 [package]
-name = "sequence-map"
-version = "0.1.0"
-authors = ["Filip Filmar <filmil@gmail.com>"]
+authors = ["Filip Filmar <filmil@gmail.com>", "Google Inc."]
 edition = "2018"
+license = "Apache-2.0"
+name = "sequence-map"
+readme = "README.md"
+repository = "https://github.com/filmil/sequence-map"
+version = "0.1.0"
+
+description = """
+Implements a map of unsigned 64-bit keys into strings.
+
+The map is optimized for creating it once, and then reading many times. The struct `Builder` is
+used to build the map, and the struct `Map` is used for lookups.
+
+The special property of the implementation is that it encodes all the data needed for the
+lookup in a single sequence of bytes.  This makes it rather interesting for dynamic loading of
+data that can then be placed in an operating system's read only memory.  The internal structure
+requires no decoding when it is loaded (say from a file).
+"""
+
+keywords = ["lookup", "map", "data structures", "sequence map"]
 
 [dependencies]
 zerocopy = "0.3.0"
@@ -13,3 +30,8 @@ criterion = "0.3"
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[badges]
+maintenance = { status = "actively-developed" }
+is-it-maintained-issue-resolution = { repository = "filmil/sequence-map" }
+is-it-maintained-open-issues = { repository = "filmil/sequence-map" }
