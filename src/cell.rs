@@ -1,9 +1,8 @@
-
 use zerocopy::AsBytes;
 use zerocopy::FromBytes;
 
 /// The possible types of an [Instance].
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Type {
     Empty = 0,
     StringPtr = 1,

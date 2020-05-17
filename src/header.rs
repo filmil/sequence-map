@@ -118,7 +118,7 @@ impl<'a> Table<'a> {
 
     pub fn index(&self, key: u64) -> usize {
         let bits = self.header.bits;
-        let bitmask: u64 = 1 << bits - 1;
+        let bitmask: u64 = (1 << bits) - 1;
         let index = key & bitmask;
         index as usize
     }
